@@ -1,0 +1,11 @@
+{
+  "name": "appdynamics-nodejs-extras",
+  "version": "1.0.0",
+  "description": "Additional functionality for your AppDynamics Node.JS agent",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Severin Neumann <severin.neumann@appdynamics.com>",
+  "license": "Apache-2.0"
+}
