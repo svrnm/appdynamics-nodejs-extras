@@ -16,6 +16,12 @@ function extractOperation(string) {
   }
 }
 
+function infer(inferWithField, selectionSet, operationType) {
+  let field = inferWithField ? (' ' + selectionSet.match(/^([_A-Za-z][_0-9A-Za-z]*)/)[0]) : '';
+  operationType = inferWithField ? operationType : 'unnamed' + operationType.charAt(0).toUpperCase() + operationType.slice(1);
+  return operationType+field;
+}
+
 const appdynamics4graphql = (appdynamics, options) => {
 
   const {
@@ -49,7 +55,7 @@ const appdynamics4graphql = (appdynamics, options) => {
     }
   }
 
-  function startTransaction(btName, data, query, exception) {
+  function startTransaction(btName, data, query, exception = false) {
     debugFunction('BT is', btName);
     const tnx = appdynamics.startTransaction(btName)
     const myThreadId = tnx.time.threadId
@@ -92,9 +98,7 @@ const appdynamics4graphql = (appdynamics, options) => {
         } else {
           debugFunction(operationName, operationType)
           if(!operationName) {
-            let field = inferWithField ? (' ' + selectionSet.match(/^([_A-Za-z][_0-9A-Za-z]*)/)[0]) : '';
-            operationType = inferWithField ? operationType : 'unnamed' + operationType.charAt(0).toUpperCase() + operationType.slice(1);
-            btName = operationType+field;
+            btName = infer(inferWithField, selectionSet, operationType)
           } else {
             btName = operationName;
           }
@@ -110,10 +114,10 @@ const appdynamics4graphql = (appdynamics, options) => {
     } finally {
       if (tnx) {
         debugFunction('Attaching onResponse complete handler')
-        tnx.onResponseComplete = (req, res) => {
+        res.on('finish', () => {
           debugFunction('Terminating business transaction')
           tnx.end()
-        }
+        })
       }
       next()
     }

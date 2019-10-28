@@ -8,5 +8,8 @@
   },
   "repository": "https://github.com/svrnm/appdynamics-nodejs-extras",
   "author": "Severin Neumann <severin.neumann@appdynamics.com>",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "mocha": "^6.2.2"
+  }
 }
