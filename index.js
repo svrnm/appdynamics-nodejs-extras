@@ -42,6 +42,35 @@ function infer(inferWithField, selectionSet, operationType) {
   return operationType+field;
 }
 
+function processResponse(debugFunction, collectData, chuncks, transaction) {
+  if(chuncks.length === 0) {
+    debugFunction('Body is empty')
+    return false
+  }
+  let body = ''
+  try {
+    body = JSON.parse(typeof chuncks[0] === 'string' ? chuncks.join('') : Buffer.concat(chuncks).toString('utf8'));
+  } catch(e) {
+    debugFunction('Body is not json')
+    return false
+  }
+  if(body.errors && body.errors.length > 0) {
+    const error = body.errors[0]
+    let errorObject = new Error(body.errors[0].message)
+    if(error.extensions) {
+      errorObject.code = error.extensions.exception.code
+      errorObject.stack = error.extensions.exception.stacktrace.join('')
+    }
+    transaction.markError(errorObject)
+    if(body.errors.length > 1) {
+      body.errors.forEach((error,index) => {
+        collectData(transaction, 'error-'+index+'-message', error.message)
+      })
+    }
+    return true
+  }
+}
+
 const appdynamics4graphql = (appdynamics, options) => {
 
   const {
@@ -54,7 +83,8 @@ const appdynamics4graphql = (appdynamics, options) => {
     logResponseHeaders,
     logQuery,
     exclusive,
-    withEum
+    withEum,
+    withResponseHook
    } = Object.assign({
      inferWithField: false,
      defaultBt: 'unknownQuery',
@@ -65,7 +95,8 @@ const appdynamics4graphql = (appdynamics, options) => {
      logRequestHeaders: [],
      logResponseHeaders: [],
      exclusive: true,
-     withEum: true
+     withEum: true,
+     withResponseHook: true
    }, options)
 
   const debugFunction = typeof debug === 'function' ? debug : (debug === true ? console.log : () => {});
@@ -153,20 +184,43 @@ const appdynamics4graphql = (appdynamics, options) => {
             addEumCookie(debugFunction, transaction, res, req)
           }
           debugFunction('Attaching onResponse complete handler')
+          const once = (chunck) => {
+            console.log(chunck)
+            //res.removeEventListener(once)
+          }
+
+          let chuncks = []
+          if(withResponseHook) {
+            debugFunction('Hooking into res.write')
+            const oldWrite = res.write;
+            res.write = function(chunck) {
+              chuncks.push(chunck)
+              oldWrite.apply(res, arguments);
+            }
+          }
+
           res.on('finish', () => {
-            if (res.statusCode > 399 && res.statusCode < 600) {
-              debugFunction('Marking BT as error: ' + res.statusCode)
-              transaction.markError(new Error(), res.statusCode)
+            try {
+              let hasErrors = false
+              if(withResponseHook) {
+                hasErrors = processResponse(debugFunction, collectData, chuncks, transaction)
+              }
+              if (!hasErrors && res.statusCode > 399 && res.statusCode < 600) {
+                debugFunction('Marking BT as error: ' + res.statusCode)
+                transaction.markError(new Error(), res.statusCode)
+              }
+              debugFunction('Terminating business transaction')
+              if(Array.isArray(logResponseHeaders)) {
+                logResponseHeaders.forEach(header => {
+                  if(res.hasHeader(header)) {
+                    collectData(transaction, 'response-header-' + header, res.getHeader(header))
+                  }
+                })
+              }
+              transaction.end()
+            } catch(e) {
+              debugFunction(e)
             }
-            debugFunction('Terminating business transaction')
-            if(Array.isArray(logResponseHeaders)) {
-              logResponseHeaders.forEach(header => {
-                if(res.hasHeader(header)) {
-                  collectData(transaction, 'response-header-' + header, res.getHeader(header))
-                }
-              })
-            }
-            transaction.end()
           })
         }
       } catch(e) {

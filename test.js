@@ -14,6 +14,7 @@ const appdynamics = {
   startTransaction: (b) => {
     result.btName = b
     return {
+      eumEnabled: true,
       time: {
         threadId: 1
       },
@@ -22,6 +23,11 @@ const appdynamics = {
           get: () => {
             return 1
           }
+        },
+        proxy: {
+          before: () => {
+
+          }
         }
       },
       addSnapshotData: (key, value) => {
@@ -29,6 +35,12 @@ const appdynamics = {
       },
       addAnalyticsData: (key, value) => {
         result.analyticsData[key] = value
+      },
+      end: function () {
+        result.isFinished = true
+      },
+      markError: function(_, statusCode) {
+        result.errorCode = statusCode
       }
     }
   }
@@ -39,7 +51,13 @@ const options = {
 }
 
 const res = {
-  on: () => {}
+  statusCode: 200,
+  finishCallback: () => {},
+  on: function(event, func) {
+    if(event === 'finish') {
+      this.finishCallback = func
+    }
+  }
 }
 
 
@@ -79,7 +97,9 @@ function resetResult() {
   result = {
    btName: 'unset',
    snapshotData: {},
-   analyticsData: {}
+   analyticsData: {},
+   isFinished: false,
+   errorCode: 0
  }
 }
 
@@ -93,6 +113,8 @@ function assertBtName(q, expectedName, operationName = false) {
   }
   appdynamics4graphql(appdynamics, options)(req, res, () => {})
   assert.equal(result.btName, expectedName)
+  res.finishCallback();
+  assert(result.isFinished)
 }
 
 describe('appdynamics-nodejs-extras', function() {
@@ -123,11 +145,17 @@ describe('appdynamics-nodejs-extras', function() {
       assertBtName(null, 'unknownQuery')
       assert.equal(result.snapshotData['appdynamics4graphql-error'], "TypeError: Cannot read property \'split\' of null")
     });
-    it('', function() {
+    it('It should infer the query with field if set as option.', function() {
       options.inferWithField = true
       assertBtName('{ status }', 'query status')
       assertBtName('{ luke: hero(id: "1000") { name } }', 'query luke')
       options.inferWithField = false
+    })
+    it('It should mark a transaction as error if statusCode is > 400', function() {
+      res.statusCode = 500;
+      assertBtName('{}', 'unnamedQuery')
+      assert.equal(result.errorCode, 500)
+      res.statusCode = 200;
     })
   });
 });
