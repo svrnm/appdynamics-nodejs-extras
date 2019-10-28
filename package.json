@@ -1,6 +1,6 @@
 {
   "name": "appdynamics-nodejs-extras",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Additional functionality for the AppDynamics Node.JS agent",
   "main": "index.js",
   "scripts": {

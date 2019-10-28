@@ -12,7 +12,8 @@ function extractOperation(string) {
   }
   return {
     operationName,
-    operationType
+    operationType,
+    selectionSet
   }
 }
 
@@ -91,7 +92,8 @@ const appdynamics4graphql = (appdynamics, options) => {
       // TODO: Check for graphql path?
       if(req.body && req.body.hasOwnProperty('query')) {
         let btName = defaultBt
-        let { operationName, operationType } = extractOperation(req.body.query)
+        let { operationName, operationType, selectionSet } = extractOperation(req.body.query)
+        debugFunction('Extracted operation', operationName, operationType, selectionSet)
         if(req.body.operationName) {
           operationName = req.body.operationName
           btName = operationName
