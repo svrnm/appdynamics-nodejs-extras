@@ -98,6 +98,12 @@ function assertBtName(q, expectedName, operationName = false) {
 describe('appdynamics-nodejs-extras', function() {
   describe('#appdynamics4graphql()', function() {
     it('It should name the btName unnamedQuery for an empty query', function() {
+
+      resetResult()
+      appdynamics4graphql(appdynamics, options)({}, res, () => {})
+      assert.equal(result.btName, 'unknownQuery')
+      assert.equal(result.snapshotData['appdynamics4graphql-error'], "Request body does not contain query.")
+
       assertBtName('', 'unnamedQuery')
       assertBtName('{}', 'unnamedQuery')
     });
@@ -114,7 +120,7 @@ describe('appdynamics-nodejs-extras', function() {
       assertBtName(examples.inlineFragmentNoType, 'inlineFragmentNoType')
     });
     it('It should call the query by default name if an exception occurs', function() {
-      assertBtName(null, 'IntrospectionQuery')
+      assertBtName(null, 'unknownQuery')
       assert.equal(result.snapshotData['appdynamics4graphql-error'], "TypeError: Cannot read property \'split\' of null")
     });
     it('', function() {

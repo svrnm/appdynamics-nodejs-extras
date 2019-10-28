@@ -1,3 +1,22 @@
+function addEumCookie(debugFunction, transaction, agent, res, req) {
+  try {
+    var agent = transaction.agent
+
+    var eumEnabled = (transaction.eumEnabled && !transaction.skip) || (agent.eum.enabled && agent.eum.enabledForTransaction(req));
+
+    if (!transaction.corrHeader && eumEnabled) {
+      agent.proxy.before(res, 'writeHead', function (obj) {
+        if(!transaction.isFinished) {
+          var eumCookie = self.agent.eum.newEumCookie(transaction, req, obj, isHTTPs);
+          eumCookie.build();
+        }
+      });
+    }
+  } catch (e) {
+    debugFunction(e)
+  }
+}
+
 function extractOperation(string) {
   // Remove all comments
   const query = string.split(/(?:\r\n|\n|\r)/).filter(line => !line.startsWith('#')).join('\n');
@@ -31,60 +50,67 @@ const appdynamics4graphql = (appdynamics, options) => {
     debug,
     addSnapshotData,
     addAnalyticsData,
+    logRequestHeaders,
+    logResponseHeaders,
     logQuery,
-    exclusive
+    exclusive,
+    withEum
    } = Object.assign({
      inferWithField: false,
-     defaultBt: 'IntrospectionQuery',
+     defaultBt: 'unknownQuery',
      debug: false,
      addSnapshotData: true,
      addAnalyticsData: true,
      logQuery: false,
-     exclusive: true
+     logRequestHeaders: [],
+     logResponseHeaders: [],
+     exclusive: true,
+     withEum: true
    }, options)
 
   const debugFunction = typeof debug === 'function' ? debug : (debug === true ? console.log : () => {});
 
-  function collectData(tnx, key, value) {
+  function collectData(transaction, key, value) {
     if(addSnapshotData) {
       debugFunction('Adding ' + key + ' and ' + value + ' to snapshot data');
-      tnx.addSnapshotData(key, value)
+      transaction.addSnapshotData(key, value)
     }
     if(addAnalyticsData) {
       debugFunction('Adding ' + key + ' and ' + value + ' to analytics data');
-      tnx.addAnalyticsData(key, value)
+      transaction.addAnalyticsData(key, value)
     }
   }
 
   function startTransaction(btName, data, query, exception = false) {
     debugFunction('BT is', btName);
-    const tnx = appdynamics.startTransaction(btName)
-    const myThreadId = tnx.time.threadId
-    if(tnx.agent.context.get('threadId') !== myThreadId) {
+    const transaction = appdynamics.startTransaction(btName)
+
+    const myThreadId = transaction.time.threadId
+    if(transaction.agent.context.get('threadId') !== myThreadId) {
       debugFunction('Setting threadId to', myThreadId)
-      tnx.agent.context.set('threadId', myThreadId)
+      transaction.agent.context.set('threadId', myThreadId)
     }
     if(data !== false) {
       Object.keys(data).forEach(key => {
-        collectData(tnx, key, data[key])
+        collectData(transaction, key, data[key])
       })
     }
     if(query !== false && logQuery) {
-      // collectData(tnx, 'graphql-query', query)
+      collectData(transaction, 'graphql-query', query)
     }
     if(exception !== false) {
-      tnx.addSnapshotData('appdynamics4graphql-error', exception.toString())
+      transaction.addSnapshotData('appdynamics4graphql-error', exception.toString())
     }
-    return tnx
+    return transaction
   }
 
   return (req, res, next) => {
-    let tnx = null
-    if(exclusive) {
-      const oldTnx = appdynamics.getTransaction(req);
-      if(oldTnx) {
+    let transaction = null
+    if(false /* exclusive */) {
+      const oldTransaction = appdynamics.getTransaction(req);
+      if(oldTransaction) {
         debugFunction('Ending existing business transaction')
-        oldTnx.end()
+        oldTransaction.end()
       }
     }
     try {
@@ -105,21 +131,46 @@ const appdynamics4graphql = (appdynamics, options) => {
             btName = operationName;
           }
         }
-        tnx = startTransaction(btName, { operationName, operationType }, req.body.query, false)
+        transaction = startTransaction(btName, { operationName, operationType }, req.body.query, false)
       } else {
-        startTransaction(defaultBt, false, false)
+        startTransaction(defaultBt, false, false, 'Request body does not contain query.')
         debugFunction('No body or no query set')
       }
     } catch (e) {
       debugFunction(e)
-      tnx = startTransaction(defaultBt, false, false, e)
+      transaction = startTransaction(defaultBt, false, (req && req.body && req.body.query ? req.body.query : false), e)
     } finally {
-      if (tnx) {
-        debugFunction('Attaching onResponse complete handler')
-        res.on('finish', () => {
-          debugFunction('Terminating business transaction')
-          tnx.end()
-        })
+      try {
+        if (transaction) {
+          if(Array.isArray(logRequestHeaders)) {
+            logRequestHeaders.forEach(header => {
+              if(req.headers[header]) {
+                collectData(transaction, 'request-header-' + header, req.headers[header])
+              }
+            })
+          }
+          if(withEum) {
+            addEumCookie(debugFunction, transaction, res, req)
+          }
+          debugFunction('Attaching onResponse complete handler')
+          res.on('finish', () => {
+            if (res.statusCode > 399 && res.statusCode < 600) {
+              debugFunction('Marking BT as error: ' + res.statusCode)
+              transaction.markError(new Error(), res.statusCode)
+            }
+            debugFunction('Terminating business transaction')
+            if(Array.isArray(logResponseHeaders)) {
+              logResponseHeaders.forEach(header => {
+                if(res.hasHeader(header)) {
+                  collectData(transaction, 'response-header-' + header, res.getHeader(header))
+                }
+              })
+            }
+            transaction.end()
+          })
+        }
+      } catch(e) {
+        debugFunction(e)
       }
       next()
     }
