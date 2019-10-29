@@ -31,6 +31,12 @@ You can reconfigure this default behaviour by setting the following options:
 * `addSnapshotData` (default: `true`): If set to true, add `operationName` and `operationType` to snapshot data.
 * `addAnalyticsData` (default: `true`): If set to true, add `opartionName` and `operationType` to analytics data.
 * `logQuery` (default: `false`): If set to true, the received GraphQL query will be logged into snapshot data (no analytics!).
-* logRequestHeaders: (default: `[]`): Provide a list of response headers that should be collected into snapshot data/analytics data.
-* logResponseHeaders: (default: `[]`): Provide a list of response headers that should be collected into snapshot data/analytics data.
-* withEum (default: `true`): If set to true, EUM headers/cookie is added to the transaction. Requires to have BT/EUM correlation enabled on controller site.
+* `logRequestHeaders`: (default: `[]`): Provide a list of response headers that should be collected into snapshot data/analytics data.
+* `logResponseHeaders`: (default: `[]`): Provide a list of response headers that should be collected into snapshot data/analytics data.
+* `withEum` (default: `true`): If set to true, EUM headers/cookie is added to the transaction. Requires to have BT/EUM correlation enabled on controller site.
+* `withResponseHook` (default: `false`): If set to true, error information is collected from the query response. If you provide a callback function you can access the response, the response body, a method to collect data and the transaction object:
+  ```javascript
+  options.withResponseHook = (response, body, collectData, transaction) => {
+    collectData('errorId', body.errors[0].id)
+  }
+  ```

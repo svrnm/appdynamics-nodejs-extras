@@ -42,7 +42,7 @@ function infer(inferWithField, selectionSet, operationType) {
   return operationType + field
 }
 
-function processResponse(debugFunction, collectData, chuncks, transaction) {
+function processResponse(debugFunction, collectData, responseHook, response, chuncks, transaction) {
   if (chuncks.length === 0) {
     debugFunction('Body is empty')
     return false
@@ -54,6 +54,11 @@ function processResponse(debugFunction, collectData, chuncks, transaction) {
     debugFunction('Body is not json')
     return false
   }
+
+  if (typeof responseHook === 'function') {
+    responseHook(response, body, (key, value) => collectData(transaction, key, value), transaction)
+  }
+
   if (body.errors && body.errors.length > 0) {
     debugFunction('Errors detected')
     const error = body.errors[0]
@@ -186,7 +191,7 @@ const appdynamics4graphql = (appdynamics, options) => {
           debugFunction('Attaching onResponse complete handler')
 
           const chuncks = []
-          if (withResponseHook) {
+          if (withResponseHook === true || typeof withResponseHook === 'function') {
             debugFunction('Hooking into res.write')
             const oldWrite = res.write
             res.write = function (chunck) {
@@ -198,8 +203,8 @@ const appdynamics4graphql = (appdynamics, options) => {
           res.on('finish', () => {
             try {
               let hasErrors = false
-              if (withResponseHook) {
-                hasErrors = processResponse(debugFunction, collectData, chuncks, transaction)
+              if (withResponseHook === true || typeof withResponseHook === 'function') {
+                hasErrors = processResponse(debugFunction, collectData, withResponseHook, res, chuncks, transaction)
               }
               if (!hasErrors && res.statusCode > 399 && res.statusCode < 600) {
                 debugFunction('Marking BT as error: ' + res.statusCode)
