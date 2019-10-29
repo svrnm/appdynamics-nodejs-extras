@@ -7,7 +7,7 @@ function addEumCookie(debugFunction, transaction, agent, res, req) {
     if (!transaction.corrHeader && eumEnabled) {
       agent.proxy.before(res, 'writeHead', function (obj) {
         if(!transaction.isFinished) {
-          var eumCookie = self.agent.eum.newEumCookie(transaction, req, obj, isHTTPs);
+          var eumCookie = self.agent.eum.newEumCookie(transaction, req, obj, false);
           eumCookie.build();
         }
       });
@@ -55,11 +55,12 @@ function processResponse(debugFunction, collectData, chuncks, transaction) {
     return false
   }
   if(body.errors && body.errors.length > 0) {
+    debugFunction('Errors detected')
     const error = body.errors[0]
     let errorObject = new Error(body.errors[0].message)
     if(error.extensions) {
       errorObject.code = error.extensions.exception.code
-      errorObject.stack = error.extensions.exception.stacktrace.join('')
+      errorObject.stack = error.extensions.exception.stacktrace.join('\n')
     }
     transaction.markError(errorObject)
     if(body.errors.length > 1) {
