@@ -68,11 +68,9 @@ function processResponse(debugFunction, collectData, responseHook, response, chu
       errorObject.stack = error.extensions.exception.stacktrace.join('\n')
     }
     transaction.markError(errorObject)
-    if (body.errors.length > 1) {
-      body.errors.forEach((error, index) => {
-        collectData(transaction, 'error-' + index + '-message', error.message)
-      })
-    }
+    body.errors.forEach((error, index) => {
+      collectData(transaction, 'error-' + index + '-message', error.message)
+    })
     return true
   }
 }
@@ -194,9 +192,14 @@ const appdynamics4graphql = (appdynamics, options) => {
           if (withResponseHook === true || typeof withResponseHook === 'function') {
             debugFunction('Hooking into res.write')
             const oldWrite = res.write
+            const oldEnd = res.end
             res.write = function (chunck) {
               chuncks.push(chunck)
               oldWrite.apply(res, arguments)
+            }
+            res.end = function(chunck) {
+              chuncks.push(chunck)
+              oldEnd.apply(res, arguments)
             }
           }
 
