@@ -1,12 +1,19 @@
+const uuidv4 = require('uuid/v4')
+
+/* This doesn't work
 function addEumCookie(debugFunction, transaction, res, req) {
+  debugFunction('Attaching EUM')
   try {
     const agent = transaction.agent
 
-    const eumEnabled = (transaction.eumEnabled && !transaction.skip) || (agent.eum.enabled && agent.eum.enabledForTransaction(req))
+    const eumEnabled = true // (transaction.eumEnabled && !transaction.skip) || (agent.eum.enabled && agent.eum.enabledForTransaction(req))
 
     if (!transaction.corrHeader && eumEnabled) {
+      console.log('FOR REAL!')
       agent.proxy.before(res, 'writeHead', function (obj) {
+        console.log('WRITE HEAD')
         if (!transaction.isFinished) {
+          console.log('WRITE COOKIE')
           var eumCookie = agent.eum.newEumCookie(transaction, req, obj, false)
           eumCookie.build()
         }
@@ -16,6 +23,7 @@ function addEumCookie(debugFunction, transaction, res, req) {
     debugFunction(e)
   }
 }
+*/
 
 function extractOperation(string) {
   // Remove all comments
@@ -86,8 +94,9 @@ const appdynamics4graphql = (appdynamics, options) => {
     logResponseHeaders,
     logQuery,
     exclusive,
-    withEum,
-    withResponseHook
+    /* withEum, */
+    withResponseHook,
+    withCCID
   } = Object.assign({
     inferWithField: false,
     defaultBt: 'unknownQuery',
@@ -98,8 +107,9 @@ const appdynamics4graphql = (appdynamics, options) => {
     logRequestHeaders: [],
     logResponseHeaders: [],
     exclusive: true,
-    withEum: true,
-    withResponseHook: false
+    /* withEum: true, */
+    withResponseHook: false,
+    withCCID: true
   }, options)
 
   const debugFunction = typeof debug === 'function' ? debug : (debug === true ? console.log : () => {})
@@ -117,6 +127,9 @@ const appdynamics4graphql = (appdynamics, options) => {
 
   function startTransaction(btName, data, query, exception = false) {
     debugFunction('BT is', btName)
+    if (btName === null) {
+      btName = defaultBt
+    }
     const transaction = appdynamics.startTransaction(btName)
 
     const myThreadId = transaction.time.threadId
@@ -141,7 +154,7 @@ const appdynamics4graphql = (appdynamics, options) => {
   return (req, res, next) => {
     let transaction = null
     // eslint-disable-next-line no-constant-condition
-    if (false && exclusive) {
+    if (exclusive) {
       const oldTransaction = appdynamics.getTransaction(req)
       if (oldTransaction) {
         debugFunction('Ending existing business transaction')
@@ -176,6 +189,16 @@ const appdynamics4graphql = (appdynamics, options) => {
     } finally {
       try {
         if (transaction) {
+          transaction.url = req.url
+          transaction.method = req.method
+          transaction.requestHeaders = req.headers
+
+          if (withCCID && !res.headersSent) {
+            const ccid = uuidv4()
+            res.setHeader('appdynamics-graphql-ccid', ccid)
+            collectData(transaction, 'appdynamics-graphql-ccid', ccid)
+          }
+
           if (Array.isArray(logRequestHeaders)) {
             logRequestHeaders.forEach(header => {
               if (req.headers[header]) {
@@ -183,9 +206,10 @@ const appdynamics4graphql = (appdynamics, options) => {
               }
             })
           }
-          if (withEum) {
-            addEumCookie(debugFunction, transaction, res, req)
-          }
+          // This doesn't work.
+          // if (withEum) {
+          //  addEumCookie(debugFunction, transaction, res, req)
+          // }
           debugFunction('Attaching onResponse complete handler')
 
           const chuncks = []
@@ -197,7 +221,7 @@ const appdynamics4graphql = (appdynamics, options) => {
               chuncks.push(chunck)
               oldWrite.apply(res, arguments)
             }
-            res.end = function(chunck) {
+            res.end = function (chunck) {
               chuncks.push(chunck)
               oldEnd.apply(res, arguments)
             }

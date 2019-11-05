@@ -1,0 +1,19 @@
+config:
+  target: "http://localhost:4000"
+  phases:
+    - duration: 120
+      arrivalRate: 10
+  defaults:
+    headers:
+      Sec-Fetch-Mode: cors
+      client-version: 1.0.0
+      client-name: Space Artillery [cli]
+scenarios:
+  - name: "Get launches"
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            operationName: GetLaunchList
+            variables: "{}"
+            query: "query GetLaunchList($after: String) {\n  launches(after: $after) {\n    cursor\n    hasMore\n    launches {\n      ...LaunchTile\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment LaunchTile on Launch {\n  __typename\n  id\n  isBooked\n  rocket {\n    id\n    name\n    __typename\n  }\n  mission {\n    name\n    missionPatch\n    __typename\n  }\n}\n"
